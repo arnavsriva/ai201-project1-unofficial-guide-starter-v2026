@@ -22,9 +22,16 @@ pipeline earns credit; *"80% seemed reasonable"* does not.
 For at least 4 of my 5 test questions, the retrieved chunks include one that
 contains the answer.
 
-**Why this target:**
-<!-- e.g. "One of my questions is about a topic only two documents mention, so
-     I expect that one to be hard." -->
+**Why this target:** Nine of my fourteen documents are town guides with the
+*same seven section headings*, and the town's name appears only in the `#` line
+at the top of the file. So a question that names a town has to be matched by a
+chunk that may never mention that town. I watched this happen at the baseline:
+"Where should I stay in Halden Bay?" returns chunk 0 of `guide_halden_bay.md`,
+which holds Getting there, Getting around and Eat and drink — the Where to stay
+text is in chunks 1 and 2, split across the boundary between them. Not 5 of 5,
+because question 4 is answered in two different documents at once
+(`guide_brightwater.md` says *when* the town is busiest, `guide_seasons.md` says
+*why*), and one retrieval pulling both is the thing I am least confident about.
 
 ---
 
@@ -32,9 +39,14 @@ contains the answer.
 
 Every answer the system produces names at least one source document.
 
-**Why this target:**
-<!-- Why all five and not four? What about your setup makes that achievable —
-     or what would have to go wrong for it not to be? -->
+**Why this target:** All fourteen documents are single files with stable
+filenames, `store.py::search` carries `source` through on every `Result`, and
+`generate.py` puts those filenames in the prompt. Nothing has to be inferred or
+reconstructed, so this is plumbing rather than judgement. That is exactly why
+the target is 5 of 5 and not 4: at 4 of 5 a genuine bug would look like normal
+variation, whereas any miss against 5 of 5 tells me something is actually
+broken. Note this criterion only asks that a source is *named* — whether it is
+the *right* source is criterion 5, and they come apart on this corpus.
 
 ---
 
@@ -49,49 +61,59 @@ in at least 4 of 5 tries.
      what happened into your run log. Swap them for your own if you'd rather —
      just keep five of them, or the "4 of 5" above has nothing to be 4 of. -->
 
-**Why this target:**
-<!-- What did your distances look like when you set the cutoff in Milestone 4?
-     Was there a clean gap, or did the two groups overlap? -->
+**Why this target:** I rewrote three of the five `OUT_OF_SCOPE` questions so
+this target means something. The starter's set — Mongolia, Rust, ibuprofen — is
+so far from a travel corpus that refusing it proves only that the gate is
+plugged in. Mine asks about Kyoto, Swiss rail passes and Edinburgh airport:
+travel questions, phrased like the ones the corpus *does* answer, about places
+it has never heard of. That is the case I expect to be close, because "when
+should I visit Kyoto" and "when should I visit Kestrelford" are near-identical
+sentences and the embedding model does not know which of those two places is in
+my documents. 4 of 5 rather than 5 of 5 is me budgeting for exactly one of those
+three near-misses getting through.
+
+Distances measured in Milestone 4 are in the README table, and they are the
+reason the cutoff is where it is.
 
 ---
 
-## 4. Something about your chunks
+## 4. Chunks carry enough context to be identified on their own
 
-<!-- YOU WRITE THIS ONE.
+Every chunk contains the title of the document it came from, and no chunk is
+shorter than 200 characters. Both counted across all chunks, not a sample.
 
-     How would you know if your chunks were the right size? Name something
-     countable or observable.
-
-     Examples of the right shape — don't copy these, they should come from
-     what you actually saw in Milestone 3:
-       - "At least 4 of 5 sampled chunks read as a complete thought, with no
-          sentence cut in half at either end."
-       - "No chunk is shorter than 200 characters, since anything below that
-          in my corpus turned out to be a heading with no content under it." -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** I measured the baseline chunker on this corpus before
+writing the criterion. Of its 51 chunks, **34 never name their own subject** and
+**8 are under 200 characters**, the shortest being a 24-character fragment left
+over at the end of a file. On a corpus of nine guides with identical section
+headings, a chunk that does not say which town it is about is close to useless:
+the "Where to stay" text for Halden Bay and for Kestrelford are two paragraphs
+that mean different things and read almost the same. The 200-character floor is
+there because those tail fragments are pure noise — they carry a sentence and a
+half of a section whose heading is in a different chunk — and they take up a
+top-k slot that a real chunk could have used. I am counting every chunk rather
+than sampling five because both numbers are cheap to compute and a sample of
+five would have missed the 24-character one entirely.
 
 ---
 
-## 5. Your choice
+## 5. The source named is the source the fact came from
 
-<!-- YOU WRITE THIS ONE TOO.
+For at least 4 of my 5 test questions, every source document the answer cites
+actually contains the fact it is being credited with.
 
-     Pick something you actually care about getting right. It could be about
-     speed, about refusals, about a particular kind of question your corpus
-     handles badly, about source attribution being correct rather than merely
-     present — anything, as long as it names a number or an observable
-     outcome. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** The `## Practical notes` block at the end of the nine town
+guides is **byte-identical in all nine files**. Ask "is there a full hospital in
+Kestrelford?" and there are nine chunks with an equal claim to being the answer,
+eight of which are the wrong town — and `guide_accessibility.md` contradicts all
+nine anyway, saying the nearest full hospital is in Marchwood rather than
+Brightwater. So an answer here can name a real file, quote it accurately, and
+still be citing the wrong document, which criterion 2 would happily pass. I care
+about this one more than any of the others: a system that cites confidently and
+wrongly is worse than one that refuses, because there is nothing on the surface
+of the answer to tell you which you got. 4 of 5 and not 5 of 5 because question
+5 is the one designed to break this, and I would rather write down now that I
+expect to miss it than discover it next unit and claim I meant to.
 
 ---
 

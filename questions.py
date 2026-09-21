@@ -21,13 +21,51 @@ Swap them for your own if you like. Keep five of them either way: criterion 3
 names a target of "4 of 5", and four of three is not a thing.
 """
 
+# Five questions about the city_guides corpus. Each one has a single right
+# answer sitting in a named section of a named file, so I can check a retrieved
+# chunk against the source rather than against my memory of it.
+#
+# They are deliberately spread across the difficulty range:
+#   1 and 2 sit in one section of one town guide.
+#   3 is answered in one place but asks about several towns at once.
+#   4 is genuinely split across two documents.
+#   5 has nine identical candidate chunks and one correct citation.
 QUESTIONS = [
-    # {"question": "...", "expects": "..."},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
-    {"question": "", "expects": ""},
+    {
+        # guide_halden_bay.md, "Where to stay". Mid-document, and the section
+        # never says "Halden Bay" — the name is only in the H1 at the top.
+        "question": "Where should I stay in Halden Bay?",
+        "expects": "holiday lets",
+    },
+    {
+        # guide_kestrelford.md, "Eat and drink", and again in guide_eating.md
+        # under "Opening hours". A specific time, so a vague answer is visibly
+        # a wrong one.
+        "question": "What time do the pubs in Kestrelford stop serving food in the evening?",
+        "expects": "8:30",
+    },
+    {
+        # guide_accessibility.md, "Difficult": Kestrelford, Halden Bay, Corry
+        # Vale, Elder Ness. One section, but it is the only place in the corpus
+        # that compares the towns on this.
+        "question": "Which towns in the region are hardest to get around in a wheelchair?",
+        "expects": "Halden Bay",
+    },
+    {
+        # Split across guide_brightwater.md "When to go" (says it is busiest
+        # late September to November) and guide_seasons.md "Autumn" (says why:
+        # term starts). Neither document answers the question on its own.
+        "question": "Why is Brightwater at its busiest in late September?",
+        "expects": "term",
+    },
+    {
+        # The "Practical notes" block is byte-identical in all nine town
+        # guides, so nine chunks are equally close to this question and only
+        # one of them is the right thing to cite. guide_accessibility.md also
+        # contradicts them, saying the nearest full hospital is in Marchwood.
+        "question": "Is there a full hospital in Kestrelford?",
+        "expects": "Brightwater",
+    },
 ]
 
 # Questions from a different world entirely. Your gate should refuse all five.
@@ -37,12 +75,20 @@ QUESTIONS = [
 # `run_eval.py` runs these through retrieval and the gate on every eval and
 # records what happened, so criterion 3 has evidence in the run log alongside
 # the others. They cost no model calls: a refusal never reaches the model.
+#
+# I replaced three of the starter's five. The originals were all far away from
+# a travel corpus — engines, football, ibuprofen — so refusing them says very
+# little about where my cutoff belongs. The three below are travel questions
+# about places these guides never mention, which is the case the gate actually
+# has to get right: shaped like a question the corpus answers, about somewhere
+# it has never heard of. I kept two of the originals as a far-away baseline, so
+# the Milestone 4 table shows both ends.
 OUT_OF_SCOPE = [
     "What is the capital of Mongolia?",
-    "How do I change the oil in a diesel engine?",
-    "Who won the 1994 World Cup?",
-    "What is the recommended dosage of ibuprofen for a headache?",
     "How do I write a for loop in Rust?",
+    "What is the best time of year to visit Kyoto?",
+    "How much does a rail pass cost in Switzerland?",
+    "Where can I hire a car at Edinburgh airport?",
 ]
 
 
