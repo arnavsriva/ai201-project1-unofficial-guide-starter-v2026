@@ -1,6 +1,6 @@
 # The Unofficial Guide
 
-arnavsriva — corpus: `city_guides`
+Arnav Srivastava (arnavsriva) — corpus: `city_guides`
 
 ---
 
