@@ -27,8 +27,14 @@ CORPUS = os.getenv("AI201_CORPUS", "city_guides")
 # These are deliberately plain, generic numbers. Milestone 3 is where you
 # replace them with numbers that fit the documents you actually read.
 
-CHUNK_SIZE = 800        # characters per chunk
-CHUNK_OVERLAP = 120     # characters shared between neighbouring chunks
+# These stopped being "characters per chunk" when I replaced the chunker in
+# Milestone 3. `chunker.py::split_documents` cuts on `##` section headings, so
+# the section decides where a chunk ends and these two are the guard rails
+# around that decision. See the README for how I got to the numbers.
+
+CHUNK_SIZE = 900        # a ceiling: split a section only if it exceeds this
+CHUNK_OVERLAP = 80      # only used when a single section has to be split
+MIN_CHUNK_SIZE = 200    # a floor: merge a section into its neighbour below this
 
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────
