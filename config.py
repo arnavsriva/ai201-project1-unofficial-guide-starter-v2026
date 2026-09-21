@@ -46,10 +46,17 @@ TOP_K = 5               # how many chunks to pull back per question
 #
 # LOWER IS BETTER: 0.3 is a close match, 0.9 is unrelated.
 #
-# 0.6 is a reasonable starting point, not a right answer. Milestone 4 has you
-# measure your own two groups of distances and put the cutoff in the gap.
-# Most corpora land somewhere between 0.45 and 0.75.
-THRESHOLD = 0.6
+# Measured in Milestone 4, against the chunking in chunker.py::split_documents.
+# My two groups came out:
+#
+#   in corpus      0.166  0.243  0.259  0.386  0.559     <- worst is 0.5589
+#   out of corpus  0.624  0.642  0.721  0.810  0.861     <- best is 0.6244
+#
+# So the gap is 0.5589 .. 0.6244 and 0.59 sits almost exactly in the middle of
+# it: 0.031 of room below, 0.034 above. The starter's 0.6 also lands in the gap,
+# but off-centre — it leaves only 0.024 before "what is the best time of year to
+# visit Kyoto?" gets let through. The full table is in the README.
+THRESHOLD = 0.59
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────
