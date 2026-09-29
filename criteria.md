@@ -115,6 +115,20 @@ of the answer to tell you which you got. 4 of 5 and not 5 of 5 because question
 5 is the one designed to break this, and I would rather write down now that I
 expect to miss it than discover it next unit and claim I meant to.
 
+> **Tightened in unit 2 (an addition, not a revision — the original above
+> still stands and is what the run logs are scored against):** Where two
+> retrieved sources disagree about the fact being asked for, the answer says
+> so and names both.
+>
+> **Why tightened:** The original was met 5 of 5 in every run, and the
+> question it was written to catch passed it while doing exactly what I was
+> afraid of. All three "before" answers to "Is there a full hospital in
+> Kestrelford?" cited `guide_kestrelford.md` (Brightwater) and never mentioned
+> that the rank-1 chunk, from `guide_accessibility.md`, says Marchwood. Every
+> citation was accurate, so the criterion as written could not see it. The
+> check is `scorer.disagreement_named`, and it only applies to question 5,
+> which is the one question where the corpus contradicts itself.
+
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────────

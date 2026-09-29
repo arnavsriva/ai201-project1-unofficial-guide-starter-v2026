@@ -65,6 +65,12 @@ QUESTIONS = [
         # contradicts them, saying the nearest full hospital is in Marchwood.
         "question": "Is there a full hospital in Kestrelford?",
         "expects": "Brightwater",
+        # Added in unit 2, after the "before" run. The two retrieved sources
+        # disagree — guide_kestrelford.md says Brightwater, the rank-1 chunk
+        # from guide_accessibility.md says Marchwood — and all three "before"
+        # answers named only the first. `scorer.disagreement_named` checks
+        # that an answer names both. This does not change `expects`.
+        "disagreement": ["Brightwater", "Marchwood"],
     },
 ]
 
