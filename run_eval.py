@@ -51,6 +51,27 @@ def load_scorer():
     return judge if callable(judge) else None
 
 
+def load_scorer_extras():
+    """The optional per-criterion parts of scorer.py, if it has them.
+
+    The starter only asks scorer.py for `judge`, which is one bool per run.
+    One bool cannot say *which* criterion failed, so my scorer also exposes
+    `breakdown` (the checks behind criteria 1, 2 and 5, separately) and
+    `chunk_check` (criterion 4, counted once over every chunk). If either is
+    missing this script behaves exactly as shipped.
+    """
+    try:
+        import scorer  # noqa: PLC0415
+    except ImportError:
+        return None, None
+    breakdown = getattr(scorer, "breakdown", None)
+    chunk_check = getattr(scorer, "chunk_check", None)
+    return (
+        breakdown if callable(breakdown) else None,
+        chunk_check if callable(chunk_check) else None,
+    )
+
+
 def run_once(question: str, top_k, threshold, corpus, variant):
     """One question, one run. Returns the answer and what retrieval gave us."""
     from store import search
@@ -92,6 +113,7 @@ def main():
         sys.exit(1)
 
     judge = load_scorer()
+    breakdown, chunk_check = load_scorer_extras()
     if judge is None:
         print("No scorer.py found — running unscored. Verdict column will be blank.")
         print("You'll build scorer.py in class in unit 2.\n")
@@ -113,10 +135,12 @@ def main():
                 question, top_k, threshold, corpus, args.variant
             )
             passed = judge(question, expects, answer, results) if judge else None
+            detail = breakdown(question, expects, answer, results) if breakdown else None
             run_results.append(passed)
 
             mark = {True: "pass", False: "fail", None: "—"}[passed]
-            print(f"  run {run}: {mark}  (best distance {decision.best_distance:.3f})")
+            print(f"  run {run}: {mark}  (best distance {decision.best_distance:.3f})"
+                  f"{'  ' + _detail_line(detail) if detail else ''}")
 
             transcript.append(
                 {
@@ -126,17 +150,45 @@ def main():
                     "sources": sorted({r.source for r in results}),
                     "best_distance": decision.best_distance,
                     "gate_passed": decision.passed,
+                    "detail": detail,
                 }
             )
 
         rows.append({"question": question, "expects": expects, "runs": run_results})
 
     gate_rows = check_out_of_scope(top_k, threshold, corpus, args.variant)
+    chunk_result = chunk_check() if chunk_check else None
+    if chunk_result:
+        print(f"\nChunks: {chunk_result['passing']} of {chunk_result['total']} name "
+              f"their document and are at least {chunk_result['floor']} characters.")
 
     write_report(
         rows, transcript, gate_rows, args, corpus, top_k, threshold,
-        scored=judge is not None,
+        scored=judge is not None, chunk_result=chunk_result,
     )
+
+
+# The checks scorer.breakdown reports, in the order the criteria are numbered.
+# (key, label). `correct` is not a criterion on its own; it is what `judge`
+# adds on top of them, and it is worth seeing separately.
+DETAIL_CHECKS = [
+    ("retrieval_hit", "1. A retrieved chunk contains the answer"),
+    ("names_source", "2. The answer names a source"),
+    ("citations_hold", "5. Every source the answer cites contains the fact"),
+    ("disagreement_named", "5, tightened in unit 2. Where the sources disagree, the answer names both"),
+    ("correct", "The answer itself contains the expected phrase"),
+]
+
+
+def _detail_line(detail: dict) -> str:
+    """One short line of ticks and crosses for the console."""
+    marks = " ".join(
+        f"{key.split('_')[0]}{'✓' if detail.get(key) else '✗'}"
+        for key, _ in DETAIL_CHECKS
+        if detail.get(key) is not None
+    )
+    cited = ", ".join(detail.get("cited") or []) or "nothing"
+    return f"[{marks}] cited {cited}"
 
 
 def check_out_of_scope(top_k, threshold, corpus, variant):
@@ -176,7 +228,8 @@ def check_out_of_scope(top_k, threshold, corpus, variant):
     return rows
 
 
-def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, scored):
+def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, scored,
+                 chunk_result=None):
     config.RESULTS_DIR.mkdir(exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M")
     label = f"_{args.label}" if args.label else ""
@@ -210,6 +263,53 @@ def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, sc
             cells.append({True: "pass", False: "fail", None: " "}[passed])
         question = row["question"].replace("|", "\\|")
         lines.append(f"| {question} | {' | '.join(cells)} |")
+
+    detailed = [t for t in transcript if t.get("detail")]
+    if detailed:
+        total = len(rows)
+        lines += [
+            "",
+            "## Per-criterion counts",
+            "",
+            "Produced by `scorer.py::breakdown`, aggregated by `run_eval.py::write_report`.",
+            f"Each cell is how many of the {total} questions passed that check in that run.",
+            "These are the numbers the README's run log is built from.",
+            "",
+            f"| Check | {run_headers} |",
+            f"|---|{run_divider}|",
+        ]
+        for key, label in DETAIL_CHECKS:
+            cells = []
+            for run in range(1, n + 1):
+                # A check that returns None does not apply to that question
+                # (the tightened criterion 5 only applies where the corpus
+                # disagrees with itself), so it is counted out of the
+                # questions it does apply to.
+                applicable = [
+                    t for t in detailed
+                    if t["run"] == run and t["detail"].get(key) is not None
+                ]
+                hits = sum(1 for t in applicable if t["detail"][key])
+                cells.append(f"{hits} of {len(applicable)}")
+            lines.append(f"| {label} (`scorer.{key}`) | {' | '.join(cells)} |")
+
+    if chunk_result:
+        lines += [
+            "",
+            "## Every chunk names its document (criterion 4)",
+            "",
+            f"Produced by `scorer.py::chunk_check`, once — chunking is deterministic.",
+            "",
+            f"**{chunk_result['passing']} of {chunk_result['total']}** chunks contain "
+            f"their document's title and are at least {chunk_result['floor']} characters.",
+        ]
+        if chunk_result["missing_title"]:
+            lines.append(f"- Missing title: {', '.join(chunk_result['missing_title'])}")
+        if chunk_result["too_short"]:
+            lines.append(
+                "- Too short: "
+                + ", ".join(f"{l} ({k} chars)" for l, k in chunk_result["too_short"])
+            )
 
     if not scored:
         lines += [
@@ -254,6 +354,17 @@ def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, sc
             f"- Best distance: {entry['best_distance']:.4f} "
             f"({'passed' if entry['gate_passed'] else 'refused by'} the gate)",
             f"- Sources retrieved: {', '.join(entry['sources']) or 'none'}",
+        ]
+        if entry.get("detail"):
+            d = entry["detail"]
+            checks = ", ".join(
+                f"{label.split('. ', 1)[-1].lower()} {'yes' if d.get(key) else 'NO'}"
+                for key, label in DETAIL_CHECKS
+                if d.get(key) is not None
+            )
+            lines.append(f"- Scorer (`scorer.py::breakdown`): {checks}; "
+                         f"cited {', '.join(d.get('cited') or []) or 'nothing'}")
+        lines += [
             "",
             "```",
             entry["answer"],
