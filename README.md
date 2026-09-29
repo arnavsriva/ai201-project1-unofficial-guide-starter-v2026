@@ -246,117 +246,339 @@ No stretch feature attempted in unit 1.
 
 # Unit 2
 
-<!-- These sections get ADDED to what's already above. Don't delete or rewrite
-     unit 1 — the point is that someone can see what you said before you knew
-     how it went. -->
-
 ## Run Log — Before
 
-<!-- Your five criteria, three runs each. `python run_eval.py --label before`
-     runs the questions, puts the OUT_OF_SCOPE ones through the gate, and
-     writes it all into results/ for you. Targets come from criteria.md; the
-     verdict column is your call.
-
-     Criterion 3 is measured in one deterministic pass rather than three, so
-     the same number goes in all three run columns. That's correct, not lazy.
-
-     Milestone 1. -->
+`python run_eval.py --label before` → `results/run_2026-09-29_0938_before.md`.
+Corpus `city_guides`, top-k 5, cutoff 0.59, three runs per question with
+caching off, 15 model calls. Chunks from `chunker.py::split_documents`,
+retrieval by `store.py::search`, answers by `generate.py::answer_from_chunks`.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. Every chunk names its document, none under 200 chars | 91 of 91 |  |  |  |  |
-| 5. Cited source contains the fact | 4 of 5 |  |  |  |  |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 4. Every chunk names its document, none under 200 chars | 91 of 91 | 91 of 91 | 91 of 91 | 91 of 91 | MET |
+| 5. Cited source contains the fact | 4 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
 
-<!-- Underneath, paste the REAL output for each criterion from one of your
-     runs — the actual text your system produced, not a description of it.
-     Name the file and function that produced it. -->
+Criteria 3 and 4 are one deterministic pass each, so the same number sits in
+all three columns.
+
+**How the numbers were produced.** The starter's `run_eval.py` gives one
+pass/fail per run and cannot say which criterion it was. So `scorer.py` has,
+besides the `judge` the script looks for, a `breakdown` that runs the checks
+behind criteria 1, 2 and 5 separately, and `run_eval.py::write_report` now
+counts those per run into a "Per-criterion counts" table in the results file.
+The checks are string comparisons against the `expects` phrase written in
+`questions.py` in unit 1:
+
+- `scorer.retrieval_hit` — criterion 1: some retrieved chunk contains the phrase.
+- `scorer.names_source` — criterion 2: the answer contains a filename that
+  actually exists in the corpus. "The guide says" does not count.
+- `scorer.citations_hold` — criterion 5: *every* file the answer names contains
+  the phrase. An answer that names nothing fails this too, rather than passing
+  by having no citation to get wrong.
+- `scorer.chunk_check` — criterion 4, counted once over all 91 chunks.
+
+One normalisation, and it is the only judgement in the file: `8.30`, `8:30`
+and `8 30` are treated as the same string, because question 2 expects "8:30"
+and the model is entitled to write it either way.
+
+### Real output, one per criterion
+
+**Criterion 1** — retrieval by `store.py::search`, checked by
+`scorer.py::retrieval_hit`. This is the closest of the five, the wheelchair
+question, from `python app.py retrieve`:
+
+```
+Question: Which towns in the region are hardest to get around in a wheelchair?
+
+#   distance   source                           preview
+1   0.5589     guide_accessibility.md           Getting around the region with limited mobility — Di...
+2   0.6184     guide_accessibility.md           Getting around the region with limited mobility — Ov...
+3   0.6347     guide_corry_vale.md              Corry Vale — Getting around  Nothing within the vall...
+4   0.6526     guide_walking.md                 Walking in the region — Seasonal notes  Add four min...
+5   0.6534     guide_walking.md                 Walking in the region — Easy, on good surfaces  The ...
+
+Gate: best distance 0.559 is under the 0.59 cutoff
+```
+
+The rank-1 chunk is `guide_accessibility.md#2`, the "Difficult" section, and
+it contains "Halden Bay". It is also the only one of the five under the
+cutoff — the other four are material the gate would have refused on their own.
+That is worth remembering for the Diagnoses.
+
+**Criterion 2** — answers by `generate.py::answer_from_chunks`, checked by
+`scorer.py::names_source`. Question 1, run 1:
+
+```
+According to `guide_halden_bay.md`, Halden Bay consists almost entirely of holiday lets rather than hotels, and there is also one inn located on the harbour.
+```
+
+**Criterion 3** — `run_eval.py::check_out_of_scope` through `gate.py::check`:
+
+```
+| Out-of-scope question | Best distance | Gate |
+|---|---|---|
+| What is the capital of Mongolia? | 0.810 | refused |
+| How do I write a for loop in Rust? | 0.861 | refused |
+| What is the best time of year to visit Kyoto? | 0.624 | refused |
+| How much does a rail pass cost in Switzerland? | 0.721 | refused |
+| Where can I hire a car at Edinburgh airport? | 0.642 | refused |
+```
+
+**Criterion 4** — `scorer.py::chunk_check` over `chunker.py::split_documents`:
+
+```
+91 of 91 chunks name their document and are at least 200 characters.
+```
+
+**Criterion 5** — checked by `scorer.py::citations_hold`. Question 5, run 1,
+the question written to break this criterion:
+
+```
+No, there is not a full hospital in Kestrelford; the nearest full hospital is in Brightwater.
+
+(Source: `guide_kestrelford.md`)
+```
+
+The run log's scorer line for it reads *"every source the answer cites
+contains the fact yes; cited guide_kestrelford.md"*, and that file does say
+"The nearest full hospital is in Brightwater." Sources retrieved for the same
+run: `guide_accessibility.md, guide_kestrelford.md` — and the rank-1 chunk,
+at 0.3865, was the accessibility one, which says the nearest full hospital is
+in **Marchwood**. The answer does not mention it. Hold that thought.
 
 ## Verdicts
 
-<!-- MET or MISSED for each of the five, against the target you wrote last
-     unit — not a new one. Plus a sentence on how you decided. That sentence
-     matters most where it was close.
-
-     If your target said 4 of 5 and your runs came out 4, 3, 4, that's a MISS.
-     The target has to hold, not show up occasionally.
-
-     Milestone 2. -->
-
 | # | Criterion | Verdict | How I decided |
 |---|---|---|---|
-| 1 |  |  |  |
-| 2 |  |  |  |
-| 3 |  |  |  |
-| 4 |  |  |  |
-| 5 |  |  |  |
+| 1 | Retrieved chunk contains the answer | MET | 15 of 15 runs by the scorer, and retrieval is deterministic so the three runs are one measurement repeated. I hand-checked that the `expects` phrase sits in the chunk that *is* the answer rather than incidentally elsewhere — for question 4, "term" is in `guide_seasons.md#2` ("as term starts"), which is the answering chunk, and also in the Brightwater overview ("term time"), which is not; both were retrieved, so the check would have passed either way. The close call is question 3 at 0.559, discussed below. |
+| 2 | Every answer names a source | MET | 15 of 15. The scorer only accepts a filename that exists in the corpus, so this is not a check that can be passed by writing "the guide". Every answer named at least one file and nine of the fifteen named exactly one. No judgement was needed, which is what I said in unit 1 would happen. |
+| 3 | Gate stops out-of-corpus questions | MET | 5 of 5 in one deterministic pass. The nearest to getting through was Kyoto at 0.624, with 0.034 to spare — the identical number from Milestone 4, because nothing touched the index between then and now. |
+| 4 | Every chunk names its document, none under 200 chars | MET | 91 of 91, both halves counted over every chunk rather than a sample. |
+| 5 | Cited source contains the fact | MET | 15 of 15 by the proxy. I read all fifteen answers by hand as well, because the proxy only says the cited file contains the `expects` phrase, not that it contains the sentence the answer attributes to it. It did, every time: nine answers cite one file, six cite two, and each citation is a file that says what it is credited with. The close one is question 3, run 2, which named only Halden Bay and Kestrelford where the section lists four towns — an incomplete answer, but every word of it is in `guide_accessibility.md`, and this criterion is about the citation, not completeness. |
 
 ## Diagnoses
 
-<!-- For each miss: which stage caused it, and how. The stage alone isn't
-     enough — you need the mechanism.
+Nothing was missed. All five criteria held in all three runs, so there is no
+miss to diagnose, and I want to be careful not to invent one.
 
-     Not a diagnosis: "Question 3 didn't work."
-     A diagnosis:     "Question 3 asks about laundry costs. The answer is in
-                       one sentence that got split across two chunks, so
-                       neither chunk on its own contains it."
+The honest version of "were the targets set low" is: two of them were, in ways
+I can show with numbers rather than assert, and both come from the same
+mistake — I measured one phrasing of one question per criterion, and the
+phrasing was doing work I had not noticed.
 
-     The five stages: loading → chunking → embedding → retrieval → generation.
+**1. Criterion 5 could not see the failure it was written to catch.**
+Question 5 retrieves two chunks 0.002 apart: `guide_accessibility.md#3`
+(0.3865, "The nearest full hospital is in Marchwood") at rank 1 and
+`guide_kestrelford.md#7` (0.3889, "The nearest full hospital is in
+Brightwater") at rank 2. The corpus contradicts itself, and I knew that in unit
+1 — it is in the criteria file. All three answers cited the Kestrelford guide,
+said Brightwater, and never mentioned Marchwood. Every citation was accurate,
+so criterion 5 passed 3 of 3 while the system did precisely the thing I wrote
+in criteria.md that I cared about most: it picked one of two conflicting
+sources and presented it as the answer, with nothing on the surface to say a
+choice had been made.
 
-     Look for a pattern. If three misses all ask about numbers, that's one
-     problem, not three.
+**Stage: generation.** Both claims were in the prompt — retrieval did its job.
+The mechanism, as far as I can see it from outside: the grounding instruction
+says to be brief and to name the document, and says nothing about what to do
+when documents disagree, so the model resolved the conflict by omission. Which
+one it dropped was consistent, 3 of 3, and I think the title line explains it:
+`Kestrelford — Practical notes` names the town in the question and
+`Getting around the region with limited mobility — Practical` does not.
 
-     Missed nothing? Say so, then say honestly whether your targets were set
-     low, and which one you'd tighten and to what.
+**What I would tighten it to:** *where two retrieved sources disagree about the
+fact asked for, the answer says so and names both.* Re-scored against the
+"before" transcript that is 0 of 3 — none of the three answers contains the
+word "Marchwood". This is now written under the original in `criteria.md`,
+marked as an addition rather than a revision, and implemented as
+`scorer.disagreement_named`, which only applies to question 5 because it is
+the only question where the corpus disagrees with itself. The original
+criterion stays, and the run logs are scored against it.
 
-     Milestone 3. -->
+**2. Criteria 1 and 3 were measured with a margin of one sentence.** Question
+3 passed at 0.559 against a cutoff of 0.59. I rephrased it seven ways and put
+each through `store.py::search` and `gate.py::check` — no model calls:
+
+| Phrasing | Best distance | Rank-1 chunk | Gate |
+|---|---|---|---|
+| Which towns in the region are hardest to get around in a wheelchair? | 0.559 | `guide_accessibility.md#2` | passed |
+| Which towns should I avoid if I use a wheelchair? | 0.596 | `guide_accessibility.md#2` | **refused** |
+| Which towns are worst for wheelchair users? | 0.603 | `guide_accessibility.md#2` | **refused** |
+| Where in the region is wheelchair access poor? | 0.619 | `guide_accessibility.md#2` | **refused** |
+| Which places are difficult with limited mobility? | 0.556 | `guide_accessibility.md#2` | passed |
+| Is Halden Bay wheelchair accessible? | 0.504 | `guide_accessibility.md#2` | passed |
+| Which towns are step-free? | 0.530 | `guide_accessibility.md#0` | passed |
+
+Three of the four phrasings built around the word "wheelchair" are refused,
+and in every one of them the right chunk is at rank 1. Retrieval is correct
+and the gate says no.
+
+**Stage: embedding.** Not retrieval, which ranked the right chunk first every
+time, and not the cutoff. The accessibility guide says "limited mobility" in
+its title and "wheelchair" once in 2,178 characters, so a question built on
+"wheelchair" embeds at about 0.60 from it — the same band as Kyoto (0.624) and
+Edinburgh airport (0.642). No cutoff separates 0.596 from 0.624; the gap I
+measured in Milestone 4 was between the five sentences I happened to write and
+the five out-of-scope sentences I happened to write, not between in-corpus and
+out-of-corpus. Nothing in the criteria measured that, because each criterion
+saw one phrasing.
+
+I tightened the first of these and not the second, because the first could be
+measured on the questions I already had and it is the one I said mattered
+most. The second is in What's Still Broken.
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** one line added to `GROUNDING_INSTRUCTION` in
+`generate.py`:
 
-**Why I picked it:**
+```
+- If two documents disagree about the answer, say so and name both. Do not pick one and drop the other.
+```
 
-<!-- Connect it to a specific diagnosis above in one sentence. If you can't,
-     you picked a fix because it sounded impressive. -->
+Nothing else. No re-index, same chunks, same cutoff, same top-k. The "before"
+and "after" runs differ by that sentence and by nothing else, which is the
+only way the second run says anything about the first.
+
+**Why I picked it:** diagnosis 1 puts the miss in the generation stage — both
+claims were in the prompt and the model dropped one — so the fix belongs in
+the one instruction that stage receives.
 
 ### Run Log — After
 
-<!-- Same format, same five criteria, three runs each.
-     `python run_eval.py --label after` -->
+`python run_eval.py --label after` → `results/run_2026-09-29_0942_after.md`.
+Same settings, 15 model calls.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. Every chunk names its document, none under 200 chars | 91 of 91 |  |  |  |  |
-| 5. Cited source contains the fact | 4 of 5 |  |  |  |  |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 4. Every chunk names its document, none under 200 chars | 91 of 91 | 91 of 91 | 91 of 91 | 91 of 91 | MET |
+| 5. Cited source contains the fact | 4 of 5 | 5 of 5 | 5 of 5 | 5 of 5 | MET |
+| 5, tightened in unit 2: where sources disagree, the answer names both (question 5 only) | 1 of 1 | 0 of 1 | 0 of 1 | 0 of 1 | MISSED |
 
-**Did it help?**
+Question 5, run 1, after the change — `generate.py::answer_from_chunks`:
 
-<!-- Say plainly whether it did, and how you know. If it made things worse,
-     say that — a change that backfired, honestly reported, earns full credit
-     and is more interesting than one that worked. What matters is that you can
-     tell.
+```
+No, there is no full hospital in Kestrelford. According to `guide_accessibility.md`, Kestrelford has a minor injuries unit with limited hours or nothing at all, and `guide_kestrelford.md` states that the nearest full hospital is in Brightwater.
+```
 
-     Milestone 4. -->
+**Did it help?** No, on the number it was aimed at. Something adjacent moved,
+and the way it moved is the finding.
+
+| Question 5, three runs each | Before | After |
+|---|---|---|
+| Answers citing `guide_accessibility.md` | 0 of 3 | 3 of 3 |
+| Answers that mention Marchwood | 0 of 3 | 0 of 3 |
+
+The instruction got the model to bring in the second document, and it brought
+in the sentence from that document that *agrees* — "Kestrelford has a minor
+injuries unit with limited hours or nothing at all" — and left out the
+sentence two lines above it that disagrees. I think I know why, and it is my
+wording rather than the model's disobedience: the question is a yes/no, both
+documents agree the answer is no, and the disagreement is about a secondary
+fact — where the nearest full hospital is. "Disagree about the answer" was
+satisfied to the letter. The scorer reads 0 of 3 before and 0 of 3 after, and
+I read all six answers to make sure the scorer was not missing a paraphrase
+of Marchwood. It was not.
+
+Side effects, since a prompt change touches every question: no regression on
+any of the five criteria, all 15 runs pass as before. Answers got longer —
+question 3 run 3 became a four-bullet list, question 4 run 3 added a hedge
+about which document "explicitly" gives the reason — and output tokens across
+the 15 calls went from 715 to 893. That is the cost of a sentence that did not
+buy what it was for.
+
+One probe outside the run logs, which I am reporting because it changes what
+I would do next: I reworded the instruction to *"check whether any two
+documents state different facts about the same thing; if they do, say so and
+name both files, even if the difference is not the main point of the
+question"* and ran question 5 three times with it. It named Marchwood in 1 of
+3. A stronger instruction moves this from never to sometimes, which is not a
+fix, and I did not swap it in — one change per logged run is the rule that
+makes the "after" log attributable to the "before" log.
 
 ## What's Still Broken
 
-<!-- For each criterion still missed after your fix: what you'd do about it,
-     and why you stopped where you did.
+**The tightened criterion 5: 0 of 3.** Two things I would do, in order.
 
-     "I ran out of time" is fine if it's true. Pretending nothing is left is
-     not.
+The cheap one is to change the question. "Where is the nearest full hospital
+to Kestrelford?" makes the disagreement *the* answer rather than a footnote to
+a yes/no; there is then no agreed "no" for the model to settle on and stop.
+Retrieval for that phrasing already returns the same two chunks in the same
+order (0.344 and 0.357), so it is a change to the question, not the pipeline.
 
-     Milestone 5. -->
+The real one is to stop asking the model to notice contradictions in passing.
+The probe above says an instruction gets followed somewhere between 0 and 1
+time in 3; that is not a knob to keep turning. Instead, a second call before
+the answer: *"Here are five excerpts. List any facts two of them state
+differently."* Its output goes into the answer prompt as a "Conflicts" block
+the model has to address. It costs one extra call per question and turns
+something the model can skip into a step it cannot.
+
+Why I stopped: the two logged runs plus the probe came to 33 model calls and
+all of the time I had, and a second prompt change would need its own
+before-and-after to mean anything — stacking it on this one would leave me
+unable to say which sentence did what.
+
+**The gate refuses paraphrases of in-corpus questions.** Three of the seven
+wheelchair phrasings above, all with the right chunk at rank 1. The obvious
+next step is hybrid search — `rank-bm25` ships in the starter for it — so I
+measured what it would do before building it. BM25 over the 91 chunks, top
+score and top chunk per question, against the dense distance:
+
+| Question | Dense | BM25 top score | BM25 top chunk |
+|---|---|---|---|
+| Which towns should I avoid if I use a wheelchair? | 0.596 | 6.75 | `guide_seasons.md#1` |
+| Which towns are worst for wheelchair users? | 0.603 | 4.37 | `guide_regional_transport.md#2` |
+| Where in the region is wheelchair access poor? | 0.619 | 9.57 | `guide_marchwood.md#3` |
+| What is the best time of year to visit Kyoto? | 0.624 | 11.27 | `guide_seasons.md#0` |
+| Where can I hire a car at Edinburgh airport? | 0.642 | 7.32 | `guide_givens_mill.md#5` |
+
+Keyword search does not rescue these. Its top chunk for all three paraphrases
+is the wrong one — "towns", "region", "access" outscore the single occurrence
+of "wheelchair" — and Kyoto scores higher on BM25 than any of them, because
+"time", "year" and "visit" are all over the seasons guide. A keyword signal
+folded into the gate would let Kyoto through before it let a wheelchair
+question in. The fix that actually changes these distances is a different
+embedding model, which is the stretch option, and it means a new Milestone 4:
+new distances, new gap, new cutoff, and a 2 GB install. That is a
+re-calibration rather than one change, and the run log as written cannot show
+it, since all five of my phrasings already pass. I stopped there and wrote it
+down instead.
 
 ## What I'd Do Differently
 
-<!-- Knowing what you know now — which of your five criteria would you write
-     differently, and why?
+**Criterion 5** I would write in the tightened form from the start — *where
+retrieved sources disagree, the answer says so and names both* — and I would
+phrase question 5 so that the disagreement is the answer. I built the one
+question in the set designed to break this criterion, then wrote a criterion
+that the intended failure passes. The citation-accuracy version is still
+worth having, but as the floor, not the criterion.
 
-     Milestone 5. -->
+**Criteria 1 and 3** I would measure over paraphrases: *for each of the five
+questions, at least two of three phrasings pass the gate and retrieve the
+answering chunk.* One phrasing per question gave me a Milestone 4 gap of 0.066
+that the wheelchair table shows does not exist for questions about that
+document. It would also have caught that criterion 3's "4 of 5" was budgeting
+for the wrong failure — I set it aside for one out-of-scope question getting
+through, and none did; the failure that actually shows up is in-corpus
+questions being refused, and the criterion as written cannot see that
+direction at all.
+
+**Criterion 2** I would drop. It was 15 of 15 twice, and I said in unit 1 that
+it was plumbing rather than judgement; a criterion that cannot fail is a smoke
+test. In its place: *no answer cites a document that was not retrieved for
+it* — which is the hallucinated-citation case, and which, having now checked
+all 30 answers against their retrieved sets, also held 30 of 30, but at least
+it is a thing that could go wrong.
+
+**Criterion 4** I would keep exactly as it is. It is the only one that was a
+full count rather than a sample of five, it stayed at 91 of 91 through both
+runs because nothing touched the chunker, and that is what a criterion about a
+finished stage looks like: it did its job in unit 1 and now has nothing left
+to say, which is different from having nothing to say.
